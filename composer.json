@@ -1,0 +1,9 @@
+{
+  "name": "opencontent/octranslate_deepl",
+  "type": "ezpublish-legacy-extension",
+  "description": "Deepl handler for OpenCity CMS Translation tools (embed a deeplcom/deepl-php php-7.2 porting)",
+  "require": {
+    "opencontent/octranslate": "*"
+  },
+  "license": "GPL-2.0"
+}
