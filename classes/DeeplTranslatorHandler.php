@@ -8,6 +8,8 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
 {
     use SiteDataStorageTrait;
 
+    const MAX_BYTES_REQUEST = 77824; // 76 * 1024
+
     private $translator;
 
     public function getIdentifier(): string
@@ -50,9 +52,9 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
     public function storeSettings(array $settings): void
     {
         unset($settings['usage']);
-        if (empty($settings['key'])){
+        if (empty($settings['key'])) {
             $this->deleteSettings();
-        }else {
+        } else {
             $this->setStorage('deepl_settings', json_encode($settings));
         }
     }
@@ -72,6 +74,14 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
             ];
         }
 
+        $totalRequest = array_reduce($text, function ($carry, $item) {
+            $carry += strlen($item);
+            return $carry;
+        });
+        if ($totalRequest > self::MAX_BYTES_REQUEST) {
+            return $this->doChunkTranslate($text, $sourceLanguage, $targetLanguage, $handlerOptions);
+        }
+
         $translationResult = $this->getTranslator($this->getSettings()['key'])->translateText(
             $text,
             $this->mapLanguage($sourceLanguage, true),
@@ -80,6 +90,49 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
         );
 
         return (array)$translationResult;
+    }
+
+    private function doChunkTranslate(
+        array $text,
+        string $sourceLanguage,
+        string $targetLanguage,
+        array $handlerOptions = []
+    ): array {
+        $result = [];
+        foreach ($text as $textItem) {
+            if (strlen($textItem) > self::MAX_BYTES_REQUEST) {
+                $chunks = $this->splitString($textItem);
+                $chunkResults = [];
+                foreach ($chunks as $chunk) {
+                    $chunkResults[] = $this->getTranslator($this->getSettings()['key'])->translateText(
+                        $chunk,
+                        $this->mapLanguage($sourceLanguage, true),
+                        $this->mapLanguage($targetLanguage),
+                        $handlerOptions
+                    );
+                }
+                $result[] = $this->joinStrings($chunkResults);
+            } else {
+                $result[] = $this->getTranslator($this->getSettings()['key'])->translateText(
+                    $textItem,
+                    $this->mapLanguage($sourceLanguage, true),
+                    $this->mapLanguage($targetLanguage),
+                    $handlerOptions
+                );
+            }
+        }
+
+        return $result;
+    }
+
+    private function splitString(string $string): array
+    {
+        return str_split($string, self::MAX_BYTES_REQUEST);
+    }
+
+    private function joinStrings(array $parts): string
+    {
+        return implode("", $parts);
     }
 
     /**
@@ -101,7 +154,10 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
                 $filename = $file->attribute('original_filename');
                 $inputFilePath = $file->filePath();
                 eZClusterFileHandler::instance($inputFilePath)->fetch();
-                $outputFilePath = TranslatorManager::tempDir($file, $targetLanguage) . $targetLanguage . '_' . $filename;
+                $outputFilePath = TranslatorManager::tempDir(
+                        $file,
+                        $targetLanguage
+                    ) . $targetLanguage . '_' . $filename;
                 if (!file_exists($outputFilePath)) {
                     try {
                         $status = $this->getTranslator($this->getSettings()['key'])->translateDocument(
@@ -181,7 +237,7 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
             throw new RuntimeException("Language $languageCode not found in translator engine");
         }
 
-        if ($asSourceLanguage){
+        if ($asSourceLanguage) {
             $language = explode('-', $map[$languageCode]);
             return $language[0];
         }
