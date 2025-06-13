@@ -3,12 +3,15 @@
 use DeepL\DocumentTranslationException;
 use DeepL\TranslateTextOptions;
 use DeepL\Translator;
+use DeepL\TranslatorOptions;
 
 class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, TranslatorHandlerDocumentCapable*/
 {
     use SiteDataStorageTrait;
 
     const MAX_BYTES_REQUEST = 77824; // 76 * 1024
+
+    const TIMEOUT = 20.0;
 
     private $translator;
 
@@ -182,7 +185,7 @@ class DeeplTranslatorHandler implements TranslatorHandlerInterface /*, Translato
     private function getTranslator($authKey): Translator
     {
         if ($this->translator === null) {
-            $this->translator = new Translator($authKey);
+            $this->translator = new Translator($authKey, [TranslatorOptions::TIMEOUT => self::TIMEOUT]);
         }
 
         return $this->translator;
